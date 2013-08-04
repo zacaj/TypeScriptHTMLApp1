@@ -7,29 +7,49 @@ var vec2 = (function () {
     return vec2;
 })();
 var snap = false;
-var Greeter = (function () {
-    function Greeter(element) {
-        this.element = element;
-        this.element.innerHTML += "The time is: ";
-        this.span = document.createElement('span');
-        this.element.appendChild(this.span);
-        this.span.innerText = new Date().toUTCString();
+var Wall = (function () {
+    function Wall() {
+        this.s = null;
+        this.textureName = "";
+        this.portal = null;
+        this.left = null;
+        this.right = null;
     }
-    Greeter.prototype.start = function () {
-        var _this = this;
-        this.timerToken = setInterval(function () {
-            return _this.span.innerHTML = new Date().toUTCString();
-        }, 500);
-    };
-
-    Greeter.prototype.stop = function () {
-        clearTimeout(this.timerToken);
-    };
-    return Greeter;
+    return Wall;
 })();
+var walls = new Array();
+var Sector = (function () {
+    function Sector() {
+    }
+    return Sector;
+})();
+var sectors = new Array();
 window.onkeydown = function (e) {
     if (e.keyCode == 'S'.charCodeAt(0))
         snap = !snap;
+    if (e.keyCode == 27) {
+        walls.splice(walls.indexOf(currentWall));
+        currentWall = null;
+    }
+};
+var currentWall = null;
+window.oncontextmenu = function (e) {
+    e.preventDefault();
+    if (currentWall == null) {
+        currentWall = new Wall();
+        currentWall.a = new vec2(e.offsetX, e.offsetY);
+        currentWall.b = new vec2(e.offsetX, e.offsetY);
+        walls.push(currentWall);
+    } else {
+        currentWall.b = new vec2(e.offsetX, e.offsetY);
+        currentWall = null;
+    }
+};
+window.onmousemove = function (e) {
+    if (currentWall != null) {
+        currentWall.b.x = e.offsetX;
+        currentWall.b.y = e.offsetY;
+    }
 };
 window.onload = function () {
     var el = document.getElementById('content');
@@ -40,6 +60,10 @@ window.onload = function () {
 function update() {
     drawRect(new vec2(0, 0), new vec2(1024, 768), "#FFFFFF");
     drawText(new vec2(0, 750), "Snap: " + (snap ? "on" : "off"));
+    for (var i = 0; i < walls.length; i++) {
+        var wall = walls[i];
+        drawLine(wall.a, wall.b);
+    }
 }
 function drawRect(a, b, color, outline) {
     if (typeof color === "undefined") { color = "#000000"; }
@@ -52,9 +76,11 @@ function drawRect(a, b, color, outline) {
 function drawLine(a, b, color, dotted) {
     if (typeof color === "undefined") { color = "#000000"; }
     if (typeof dotted === "undefined") { dotted = false; }
+    ctx.beginPath();
     ctx.moveTo(a.x, a.y);
     ctx.lineTo(b.x, b.y);
     ctx.fillStyle = color;
+    ctx.closePath();
     ctx.stroke();
 }
 function drawImage(p, image) {
