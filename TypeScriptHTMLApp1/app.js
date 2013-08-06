@@ -4,9 +4,16 @@ var vec2 = (function () {
         this.x = x;
         this.y = y;
     }
+    vec2.prototype.dist = function (p) {
+        var d = new vec2(p.x - this.x, p.y - this.y);
+        return Math.sqrt(d.x * d.x + d.y * d.y);
+    };
     return vec2;
 })();
-var snap = false;
+function copyvec2(p) {
+    return new vec2(p.x, p.y);
+}
+var snap = true;
 var Wall = (function () {
     function Wall() {
         this.s = null;
@@ -28,28 +35,52 @@ window.onkeydown = function (e) {
     if (e.keyCode == 'S'.charCodeAt(0))
         snap = !snap;
     if (e.keyCode == 27) {
-        walls.splice(walls.indexOf(currentWall));
-        currentWall = null;
+        if (currentWall != null) {
+            walls.splice(walls.indexOf(currentWall));
+            currentWall = null;
+        }
     }
 };
 var currentWall = null;
+var snapPosition = null;
 window.oncontextmenu = function (e) {
+    var p;
+    if (snapPosition != null)
+        p = snapPosition; else
+        p = new vec2(e.offsetX, e.offsetY);
     e.preventDefault();
-    if (currentWall == null) {
-        currentWall = new Wall();
-        currentWall.a = new vec2(e.offsetX, e.offsetY);
-        currentWall.b = new vec2(e.offsetX, e.offsetY);
-        walls.push(currentWall);
-    } else {
-        currentWall.b = new vec2(e.offsetX, e.offsetY);
+    if (currentWall != null) {
+        currentWall.b = copyvec2(p);
         currentWall = null;
+    }
+    if (snapPosition != null) {
+    } else {
+        currentWall = new Wall();
+        currentWall.a = copyvec2(p);
+        currentWall.b = copyvec2(p);
+        walls.push(currentWall);
     }
 };
 window.onmousemove = function (e) {
+    var p = new vec2(e.offsetX, e.offsetY);
     if (currentWall != null) {
         currentWall.b.x = e.offsetX;
         currentWall.b.y = e.offsetY;
     }
+    snapPosition = null;
+    if (snap)
+        for (var i = 0; i < walls.length; i++) {
+            if (walls[i] == currentWall)
+                continue;
+            if (walls[i].a.dist(p) < 5) {
+                snapPosition = copyvec2(walls[i].a);
+                break;
+            }
+            if (walls[i].b.dist(p) < 5) {
+                snapPosition = copyvec2(walls[i].b);
+                break;
+            }
+        }
 };
 window.onload = function () {
     var el = document.getElementById('content');
@@ -64,6 +95,8 @@ function update() {
         var wall = walls[i];
         drawLine(wall.a, wall.b);
     }
+    if (snapPosition)
+        drawRect(new vec2(snapPosition.x - 5, snapPosition.y - 5), new vec2(snapPosition.x + 5, snapPosition.y + 5), "#333333", true);
 }
 function drawRect(a, b, color, outline) {
     if (typeof color === "undefined") { color = "#000000"; }

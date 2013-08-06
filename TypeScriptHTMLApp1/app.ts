@@ -3,12 +3,22 @@ var ctx: CanvasRenderingContext2D;
 class vec2 {
     x: number;
     y: number;
-    constructor(x, y) {
-        this.x = x;
-        this.y = y;
+    constructor(x, y)
+    {
+            this.x = x;
+            this.y = y;
+    }
+    dist(p: vec2):number
+    {
+        var d: vec2 = new vec2(p.x - this.x, p.y - this.y);
+        return Math.sqrt(d.x * d.x + d.y * d.y);
     }
 }
-var snap: bool = false;
+function copyvec2(p: vec2)
+{
+    return new vec2(p.x, p.y);
+}
+var snap: bool = true;
 class Wall
 {
     a: vec2;
@@ -33,32 +43,63 @@ window.onkeydown = (e) =>
         snap = !snap;
     if (e.keyCode == 27)
     {
-        walls.splice(walls.indexOf(currentWall));
-        currentWall = null;
+        if (currentWall != null)
+        { 
+            walls.splice(walls.indexOf(currentWall));
+            currentWall = null;
+        }
     }
 }
-var currentWall:Wall=null;
+var currentWall: Wall = null;
+var snapPosition: vec2 = null;
 window.oncontextmenu = (e) =>
 {
+    var p;
+    if (snapPosition != null)
+        p = snapPosition;
+    else
+        p = new vec2(e.offsetX, e.offsetY);
     e.preventDefault();
-    if (currentWall == null)
+    if (currentWall != null)
     {
-        currentWall = new Wall();
-        currentWall.a = new vec2(e.offsetX, e.offsetY);
-        currentWall.b = new vec2(e.offsetX, e.offsetY);
-        walls.push(currentWall);
+        currentWall.b = copyvec2(p);
+        currentWall = null;
+    }
+    if (snapPosition != null)
+    {
+
     }
     else
-    {
-        currentWall.b = new vec2(e.offsetX, e.offsetY);
-        currentWall = null;
+    { 
+        currentWall = new Wall();
+        currentWall.a = copyvec2(p);
+        currentWall.b = copyvec2(p);
+        walls.push(currentWall);
     }
 }
 window.onmousemove = (e) => {
+    var p = new vec2(e.offsetX, e.offsetY);
     if (currentWall != null)
     {
         currentWall.b.x = e.offsetX;
         currentWall.b.y = e.offsetY;
+    }
+    snapPosition = null;
+    if(snap)
+    for (var i = 0; i < walls.length; i++)
+    {
+        if (walls[i] == currentWall)
+            continue;
+        if(walls[i].a.dist(p) < 5)
+        {
+            snapPosition = copyvec2(walls[i].a);
+            break;
+        }
+        if (walls[i].b.dist(p) < 5)
+        {
+            snapPosition = copyvec2(walls[i].b);
+            break;
+        }
     }
 }
 window.onload = () => {
@@ -75,6 +116,8 @@ function update() {
         var wall:Wall = walls[i];
         drawLine(wall.a, wall.b);
     }
+    if (snapPosition)
+        drawRect(new vec2(snapPosition.x - 5, snapPosition.y - 5),new vec2( snapPosition.x + 5, snapPosition.y + 5), "#333333", true);
 }
 function drawRect(a: vec2, b: vec2, color: string= "#000000", outline=false) {
     ctx.fillStyle = color;
