@@ -134,6 +134,7 @@ function moncontextmenu(e) {
                     var oldb = w.b;
                     var bi = w.s.pts.indexOf(w.b);
                     w.b = p;
+                    w.s.pts[bi] = p;
                     w.s.pts.splice(bi + 1, 0, oldb);
                     var wi = w.s.walls.indexOf(w);
                     var neww = new Wall();
@@ -141,6 +142,8 @@ function moncontextmenu(e) {
                     neww.b = oldb;
                     neww.textureName = w.textureName;
                     neww.s = w.s;
+                    neww.isPortal = false;
+                    walls.push(neww);
                     w.s.walls.splice(wi, 0, neww);
                     w.s.triangulate();
                 }
