@@ -89,7 +89,7 @@ window.onkeydown = (e) => {
     {
         if (currentWall != null)
         {
-            walls.splice(walls.indexOf(currentWall));
+            walls.splice(walls.indexOf(currentWall), 1);
             currentWall = null;
         }
     }
@@ -237,21 +237,73 @@ function monmousemove(e) {
     lastMousePos = p;
     e.preventDefault();
 }
-function otherWallWithPoint(wall: Wall, p: vec2): Wall {
-    for (var i = 0; i < walls.length; i++)
+function otherWallWithPoint(wall: Wall, p: vec2, list?: Wall[],inSector?): Wall {
+    if (!list)
+        list = walls;
+    if (!inSector)
+        inSector = false;
+    for (var i = 0; i < list.length; i++)
     {
-        if (walls[i] == wall)
+        if (list[i] == wall)
             continue;
-        if (walls[i].s != null)
+        if (list[i].s != null && !inSector)
             continue;
-        if (walls[i].a.dist(p) < .1 || walls[i].b.dist(p) < .1)
-            return walls[i];
+        if (list[i].a.dist(p) < .1 || list[i].b.dist(p) < .1)
+            return list[i];
     }
     return null;
 }
 function monmousedown(e) {
     mousedown = true;
     e.preventDefault();
+    if (e.ctrlKey && e.altKey)
+    {
+        if (snapPosition != null)
+        {
+            var ws = getWallsUsingPoint(snapPosition);
+            while (ws.length>0)
+            {
+                var wa = ws[0];
+                if (wa.s != null)
+                {
+                    /* var ind = wa.s.walls.indexOf(wa);
+                     wa.s.walls[(ind - 1) % wa.s.walls.length].b = wa.s.walls[(ind + 1) % wa.s.walls.length].a;
+                     wa.s.walls[(ind + 1) % wa.s.walls.length].a = wa.s.walls[(ind - 1) % wa.s.walls.length].b;*/
+                    var wal = otherWallWithPoint(wa, snapPosition,wa.s.walls,true);
+                    if (wa.a.dist(snapPosition) < .1)
+                    {
+                        wa.a = wal.a;
+                    }
+                    else
+                        wa.b = wal.b;
+                    for (var i = 0; i < wa.s.pts.length; i++)
+                    {
+                        if (wa.s.pts[i].dist(snapPosition) < .1)
+                            wa.s.pts.splice(i,1);
+                    }
+                    wa.s.triangulate();
+                    walls.splice(walls.indexOf(wal),1);
+                }
+                else
+                    walls.splice(walls.indexOf(wa),1);
+                ws = getWallsUsingPoint(snapPosition);
+            }
+        }
+        else
+        {
+            for (var i = 0; i < sectors.length; i++)
+            {
+                if (p.dist(sectors[i].p) < 15)
+                {
+                    var s = sectors[i];
+                    for (var j = 0; j < s.walls.length; j++)
+                        walls.splice(walls.indexOf(s.walls[j]), 1);
+                    sectors.splice(i,1);
+                }
+            }
+        }
+        return;
+    }
     var p;
     if (snapPosition != null)
         p = snapPosition;
@@ -568,6 +620,8 @@ function makeTri(a: vec2, b: vec2, c: vec2) {
     return r;
 }
 function load() {
+    walls.splice(0, walls.length);
+    sectors.splice(0, sectors.length);
     lpts = new Array<vec2>();
     var str = (<any>document.getElementById("out")).value;
     var lines = str.split('\n');

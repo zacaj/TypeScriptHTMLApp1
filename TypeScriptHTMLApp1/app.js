@@ -146,7 +146,18 @@ function moncontextmenu(e) {
                     walls.push(neww);
                     w.s.walls.splice(wi, 0, neww);
                     w.s.triangulate();
+                } else {
+                    var oldb = w.b;
+                    w.b = p;
+                    var neww = new Wall();
+                    neww.a = w.b;
+                    neww.b = oldb;
+                    neww.textureName = w.textureName;
+                    neww.s = w.s;
+                    neww.isPortal = false;
+                    walls.push(neww);
                 }
+                return;
             }
         }
 
@@ -194,20 +205,60 @@ function monmousemove(e) {
     lastMousePos = p;
     e.preventDefault();
 }
-function otherWallWithPoint(wall, p) {
-    for (var i = 0; i < walls.length; i++) {
-        if (walls[i] == wall)
+function otherWallWithPoint(wall, p, list, inSector) {
+    if (!list)
+        list = walls;
+    if (!inSector)
+        inSector = false;
+    for (var i = 0; i < list.length; i++) {
+        if (list[i] == wall)
             continue;
-        if (walls[i].s != null)
+        if (list[i].s != null && !inSector)
             continue;
-        if (walls[i].a.dist(p) < .1 || walls[i].b.dist(p) < .1)
-            return walls[i];
+        if (list[i].a.dist(p) < .1 || list[i].b.dist(p) < .1)
+            return list[i];
     }
     return null;
 }
 function monmousedown(e) {
     mousedown = true;
     e.preventDefault();
+    if (e.ctrlKey && e.altKey) {
+        if (snapPosition != null) {
+            var ws = getWallsUsingPoint(snapPosition);
+            while (ws.length > 0) {
+                var wa = ws[0];
+                if (wa.s != null) {
+                    /* var ind = wa.s.walls.indexOf(wa);
+                    wa.s.walls[(ind - 1) % wa.s.walls.length].b = wa.s.walls[(ind + 1) % wa.s.walls.length].a;
+                    wa.s.walls[(ind + 1) % wa.s.walls.length].a = wa.s.walls[(ind - 1) % wa.s.walls.length].b;*/
+                    var wal = otherWallWithPoint(wa, snapPosition, wa.s.walls, true);
+                    if (wa.a.dist(snapPosition) < .1) {
+                        wa.a = wal.a;
+                    } else
+                        wa.b = wal.b;
+                    for (var i = 0; i < wa.s.pts.length; i++) {
+                        if (wa.s.pts[i].dist(snapPosition) < .1)
+                            wa.s.pts.splice(i, 1);
+                    }
+                    wa.s.triangulate();
+                    walls.splice(walls.indexOf(wal));
+                } else
+                    walls.splice(walls.indexOf(wa));
+                ws = getWallsUsingPoint(snapPosition);
+            }
+        } else {
+            for (var i = 0; i < sectors.length; i++) {
+                if (p.dist(sectors[i].p) < 15) {
+                    var s = sectors[i];
+                    for (var j = 0; j < s.walls.length; j++)
+                        walls.splice(walls.indexOf(s.walls[j]));
+                    sectors.splice(i);
+                }
+            }
+        }
+        return;
+    }
     var p;
     if (snapPosition != null)
         p = snapPosition; else
@@ -504,6 +555,8 @@ function makeTri(a, b, c) {
     return r;
 }
 function load() {
+    walls.splice(0, walls.length);
+    sectors.splice(0, sectors.length);
     lpts = new Array();
     var str = (document.getElementById("out")).value;
     var lines = str.split('\n');
