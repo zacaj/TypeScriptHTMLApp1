@@ -21,6 +21,7 @@ var Wall = (function () {
         this.s = null;
         this.textureName = "";
         this.portal = null;
+        this.isPortal = false;
         this.left = null;
         this.right = null;
     }
@@ -38,6 +39,17 @@ function getWallsUsingPoint(p) {
 var Sector = (function () {
     function Sector() {
     }
+    Sector.prototype.triangulate = function () {
+        var sctx = new poly2tri.SweepContext(this.pts, { cloneArrays: true });
+        for (var i = 0; i < sectors.length; i++) {
+            if (sectors[i] == this)
+                continue;
+            if (pointInPolygon(sectors[i].p, this.pts))
+                sctx.addHole(sectors[i].pts);
+        }
+        poly2tri.triangulate(sctx);
+        this.tris = sctx.getTriangles();
+    };
     return Sector;
 })();
 var sectors = new Array();
@@ -50,15 +62,36 @@ window.onkeydown = function (e) {
             currentWall = null;
         }
     }
+    if (e.keyCode == 'F'.charCodeAt(0))
+        drawFloors = !drawFloors;
+    if (e.keyCode == 'C'.charCodeAt(0))
+        drawCeilings = !drawCeilings;
 };
 var currentWall = null;
 var snapPosition = null;
+var camera = new vec2(0, 0);
+function saveSectorSettings(i) {
+    var s = sectors[i];
+    sectors[i].ceilingColor = (document.getElementById("cc")).value;
+    sectors[i].floorColor = (document.getElementById("fc")).value;
+}
 function moncontextmenu(e) {
     var p;
     if (snapPosition != null)
         p = snapPosition; else
-        p = new vec2(e.offsetX, e.offsetY);
+        p = new vec2(e.offsetX - camera.x, e.offsetY - camera.y);
     e.preventDefault();
+    for (var i = 0; i < sectors.length; i++) {
+        if (p.dist(sectors[i].p) < 15) {
+            var str = "";
+            var s = sectors[i];
+            str += 'ceiling color: <input type="text" id="cc" value="' + s.ceilingColor + '"><br>';
+            str += 'floor color: <input type="text" id="fc" value="' + s.floorColor + '"><br>';
+            str += '<input type="button" value="Save" onclick="saveSectorSettings(' + i + ')">';
+            document.getElementById("props").innerHTML = str;
+            return;
+        }
+    }
     if (currentWall != null) {
         currentWall.b = copyvec2(p);
         currentWall = null;
@@ -79,10 +112,10 @@ var mousedown = false;
 var selectedPoints = new Array();
 var lastMousePos = null;
 function monmousemove(e) {
-    var p = new vec2(e.offsetX, e.offsetY);
+    var p = new vec2(e.offsetX - camera.x, e.offsetY - camera.y);
     if (currentWall != null) {
-        currentWall.b.x = e.offsetX;
-        currentWall.b.y = e.offsetY;
+        currentWall.b.x = p.x;
+        currentWall.b.y = p.y;
     }
     snapPosition = null;
     if (snap)
@@ -98,18 +131,26 @@ function monmousemove(e) {
                 break;
             }
         }
-    if (selectedPoints.length > 0) {
+    if (lastMousePos) {
         var d = new vec2(p.x - lastMousePos.x, p.y - lastMousePos.y);
-        for (var i = 0; i < selectedPoints.length; i++) {
-            selectedPoints[i].x += d.x;
-            selectedPoints[i].y += d.y;
+        if (selectedPoints.length > 0) {
+            for (var i = 0; i < selectedPoints.length; i++) {
+                selectedPoints[i].x += d.x;
+                selectedPoints[i].y += d.y;
+            }
+        } else if (mousedown == true) {
+            camera.x += d.x;
+            camera.y += d.y;
         }
     }
     lastMousePos = p;
+    e.preventDefault();
 }
 function otherWallWithPoint(wall, p) {
     for (var i = 0; i < walls.length; i++) {
         if (walls[i] == wall)
+            continue;
+        if (walls[i].s != null)
             continue;
         if (walls[i].a.dist(p) < .1 || walls[i].b.dist(p) < .1)
             return walls[i];
@@ -118,10 +159,11 @@ function otherWallWithPoint(wall, p) {
 }
 function monmousedown(e) {
     mousedown = true;
+    e.preventDefault();
     var p;
     if (snapPosition != null)
         p = snapPosition; else
-        p = new vec2(e.offsetX, e.offsetY);
+        p = new vec2(e.offsetX - camera.x, e.offsetY - camera.y);
     if (snapPosition != null) {
         var w = getWallsUsingPoint(snapPosition);
         var i = 0;
@@ -133,6 +175,12 @@ function monmousedown(e) {
         }
     }
     if (e.ctrlKey) {
+        for (var i = 0; i < sectors.length; i++) {
+            if (p.dist(sectors[i].p) < 15) {
+                sectors[i].triangulate();
+                return;
+            }
+        }
         var wall;
         var w = new Array();
         var pts = new Array();
@@ -153,33 +201,61 @@ function monmousedown(e) {
         pts.push(pt);
         while (true) {
             var wa = otherWallWithPoint(lastWall, pt);
+            if (wa == null) {
+                alert("no closed loop!");
+                break;
+            }
+            if (wa == wall)
+                break;
+            if (w.indexOf(wa) != -1) {
+                alert("stuck in a loop!");
+                return;
+            }
             if (wa.a.dist(pt) < .1)
                 pt = wa.b; else
                 pt = wa.a;
-            if (wa == wall)
-                break;
             w.push(wa);
             pts.push(pt);
             lastWall = wa;
         }
-        var sctx = new poly2tri.SweepContext(pts, {});
-        for (var i = 0; i < sectors.length; i++) {
-            if (pointInPolygon(sectors[i].p, pts))
-                sctx.addHole(sectors[i].pts);
-        }
-        poly2tri.triangulate(sctx);
         var s = new Sector();
-        s.p = p;
-        s.floorColor = "#AAAAAA";
-        s.tris = sctx.getTriangles();
         s.pts = pts;
         s.walls = w;
+        s.triangulate();
+        s.p = p;
+        s.floorColor = "#AAAAAA";
+        s.ceilingColor = "#555555";
+        for (var i = 0; i < w.length; i++)
+            w[i].s = s;
         sectors.push(s);
+    }
+    if (e.altKey) {
+        for (var i = 0; i < walls.length; i++) {
+            var d = distToSegmentSquared(p, walls[i].a, walls[i].b);
+            if (walls[i].s == null) {
+                alert("please make a sector first");
+                break;
+            }
+            if (walls[i].isPortal == null) {
+                alert("already a portal");
+                break;
+            }
+            if (d < 15 * 15) {
+                walls[i].isPortal = true;
+                var wall = new Wall();
+                wall.a = walls[i].a;
+                wall.b = walls[i].b;
+                wall.isPortal = true;
+                walls.push(wall);
+                break;
+            }
+        }
     }
 }
 function monmouseup(e) {
     mousedown = false;
     selectedPoints.splice(0, selectedPoints.length);
+    e.preventDefault();
 }
 window.onload = function () {
     var el = document.getElementById('content');
@@ -198,26 +274,34 @@ function update() {
             drawRect(new vec2(x, y), new vec2(x + 1, y + 1), "#333333");
         }
     for (var i = 0; i < sectors.length; i++) {
-        drawText(sectors[i].p, "S");
+        var color;
         if (drawCeilings)
-            ctx.fillStyle = sectors[i].ceilingColor; else if (drawFloors)
-            ctx.fillStyle = sectors[i].floorColor; else
-            continue;
+            color = sectors[i].ceilingColor; else if (drawFloors)
+            color = sectors[i].floorColor;
+        (ctx).setLineDash([1, 9]);
         for (var j = 0; j < sectors[i].tris.length; j++) {
             ctx.beginPath();
-            ctx.moveTo(sectors[i].tris[j].points_[0].x, sectors[i].tris[j].points_[0].y);
-            ctx.lineTo(sectors[i].tris[j].points_[1].x, sectors[i].tris[j].points_[1].y);
-            ctx.lineTo(sectors[i].tris[j].points_[2].x, sectors[i].tris[j].points_[2].y);
+            ctx.moveTo(sectors[i].tris[j].points_[0].x + camera.x, sectors[i].tris[j].points_[0].y + camera.y);
+            ctx.lineTo(sectors[i].tris[j].points_[1].x + camera.x, sectors[i].tris[j].points_[1].y + camera.y);
+            ctx.lineTo(sectors[i].tris[j].points_[2].x + camera.x, sectors[i].tris[j].points_[2].y + camera.y);
             ctx.closePath();
+            if (color)
+                ctx.fillStyle = color;
+            ctx.fill();
+            ctx.fillStyle = "#777777";
             ctx.stroke();
         }
+        (ctx).setLineDash([1, 0]);
+        drawText(new vec2(sectors[i].p.x + camera.x, sectors[i].p.y + camera.y), "S");
     }
     for (var i = 0; i < walls.length; i++) {
         var wall = walls[i];
-        drawLine(wall.a, wall.b);
+        if (wall.isPortal == true && wall.s == null)
+            continue;
+        drawLine(new vec2(wall.a.x + camera.x, wall.a.y + camera.y), new vec2(wall.b.x + camera.x, wall.b.y + camera.y), "#000000", wall.isPortal);
     }
     if (snapPosition)
-        drawRect(new vec2(snapPosition.x - 5, snapPosition.y - 5), new vec2(snapPosition.x + 5, snapPosition.y + 5), "#333333", true);
+        drawRect(new vec2(snapPosition.x + camera.x - 5, snapPosition.y + camera.y - 5), new vec2(snapPosition.x + camera.x + 5, snapPosition.y + camera.y + 5), "#333333", true);
     drawText(new vec2(0, 750), "Snap: " + (snap ? "on" : "off"));
 }
 function drawRect(a, b, color, outline) {
@@ -231,12 +315,16 @@ function drawRect(a, b, color, outline) {
 function drawLine(a, b, color, dotted) {
     if (typeof color === "undefined") { color = "#000000"; }
     if (typeof dotted === "undefined") { dotted = false; }
+    if (dotted == true)
+        (ctx).setLineDash([5]);
     ctx.beginPath();
     ctx.moveTo(a.x, a.y);
     ctx.lineTo(b.x, b.y);
     ctx.fillStyle = color;
     ctx.closePath();
     ctx.stroke();
+    if (dotted == true)
+        (ctx).setLineDash([1, 0]);
 }
 function drawImage(p, image) {
     ctx.drawImage(image, p.x, p.y);
