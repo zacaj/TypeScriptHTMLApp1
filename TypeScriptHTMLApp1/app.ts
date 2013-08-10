@@ -82,6 +82,10 @@ class Sector {
     }
 }
 var sectors: Sector[] = new Array<Sector>();
+class Entity {
+    str: string="";
+    p: vec2;
+}
 window.onkeydown = (e) => {
     if (e.keyCode == 'S'.charCodeAt(0))
         snap = !snap;
@@ -101,12 +105,17 @@ window.onkeydown = (e) => {
 var currentWall: Wall = null;
 var snapPosition: vec2 = null;
 var camera: vec2 = new vec2(0, 0);
+var entities: Entity[] = new Array<Entity>();
 function saveSectorSettings(i: number) {
     var s = sectors[i];
     sectors[i].ceilingColor = (<any> document.getElementById("cc")).value;
     sectors[i].floorColor = (<any> document.getElementById("fc")).value;
     sectors[i].bottom = (<any> document.getElementById("fh")).value;
     sectors[i].top = (<any> document.getElementById("ch")).value;
+}
+function saveEntitySettings(i: number) {
+    var e = entities[i];
+    e.str = (<any> document.getElementById("entity")).value;
 }
 function moncontextmenu(e) {
     var p;
@@ -129,6 +138,25 @@ function moncontextmenu(e) {
             document.getElementById("props").innerHTML = str;
             return;
         }
+    }
+    if (e.altKey)
+    {
+        var entity = null;
+        var i = -1;
+        for (var i = 0; i < entities.length; i++)
+        {
+            if (p.dist(entities[i].p) < 15)
+                entity = entities[i];
+        }
+        if (entity == null)
+        {
+            entity = new Entity();
+            entity.p = copyvec2(p);
+            entities.push(entity);
+            i = entities.length - 1;
+        }
+        document.getElementById("props").innerHTML = '<textarea id="entity"></textarea><input type="button" value="Save" onclick="saveEntitySettings(' + i + ')">';
+        return;
     }
     if (currentWall != null)
     {
@@ -321,6 +349,11 @@ function monmousedown(e) {
                 selectedPoints.push(w[i].b);
         }
     }
+    for (var i = 0; i < entities.length; i++)
+    {
+        if (p.dist(entities[i].p) < 15)
+            selectedPoints.push(entities[i].p);
+    }
     if (e.ctrlKey)
     {
         for (var i = 0; i < sectors.length; i++)
@@ -468,6 +501,10 @@ function update() {
             continue;
         drawLine(new vec2(wall.a.x + camera.x, wall.a.y + camera.y), new vec2(wall.b.x + camera.x, wall.b.y + camera.y),"#000000",wall.isPortal);
     }
+    for (var i = 0; i < entities.length; i++)
+    {
+        drawText(new vec2(entities[i].p.x + camera.x, entities[i].p.y + camera.y), entities[i].str.split('\n')[0]);
+    }
     if (snapPosition)
         drawRect(new vec2(snapPosition.x + camera.x - 5, snapPosition.y + camera.y - 5), new vec2(snapPosition.x + camera.x + 5, snapPosition.y + camera.y + 5), "#333333", true);
     drawText(new vec2(0, 750), "Snap: " + (snap ? "on" : "off"));
@@ -599,6 +636,12 @@ function save() {
             str += s.pts.indexOf(s.tris[j].points_[0]) + "," + s.pts.indexOf(s.tris[j].points_[1]) + "," + s.pts.indexOf(s.tris[j].points_[2]) + "\n";
         str += s.p.x + "," + s.p.y + "\n";
     }
+    str += entities.length + "\n";
+    for (var i = 0; i < entities.length; i++)
+    {
+        str += entities[i].str.length + "," + str[i].str + "\n";
+        str += entities[i].p.x + "," + entities[i].p.y + "\n";
+    }
    ( <any>document.getElementById("out")).value = str;
 }
 var lpts;
@@ -677,5 +720,12 @@ function load() {
             walls[i].portal = sectors[t.y];
             walls[i].isPortal = true;
         }
+    }
+    var nEntity = parseInt(lines[at++]);
+    for (var i = 0; i < nEntity; i++)
+    {
+        var e = new Entity();
+        e.str = lines[at++].split(',')[1];
+        e.p = getVec2(lines[at++]);
     }
 }

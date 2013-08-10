@@ -73,12 +73,18 @@ var Sector = (function () {
     return Sector;
 })();
 var sectors = new Array();
+var Entity = (function () {
+    function Entity() {
+        this.str = "";
+    }
+    return Entity;
+})();
 window.onkeydown = function (e) {
     if (e.keyCode == 'S'.charCodeAt(0))
         snap = !snap;
     if (e.keyCode == 27) {
         if (currentWall != null) {
-            walls.splice(walls.indexOf(currentWall));
+            walls.splice(walls.indexOf(currentWall), 1);
             currentWall = null;
         }
     }
@@ -90,12 +96,17 @@ window.onkeydown = function (e) {
 var currentWall = null;
 var snapPosition = null;
 var camera = new vec2(0, 0);
+var entities = new Array();
 function saveSectorSettings(i) {
     var s = sectors[i];
     sectors[i].ceilingColor = (document.getElementById("cc")).value;
     sectors[i].floorColor = (document.getElementById("fc")).value;
     sectors[i].bottom = (document.getElementById("fh")).value;
     sectors[i].top = (document.getElementById("ch")).value;
+}
+function saveEntitySettings(i) {
+    var e = entities[i];
+    e.str = (document.getElementById("entity")).value;
 }
 function moncontextmenu(e) {
     var p;
@@ -115,6 +126,22 @@ function moncontextmenu(e) {
             document.getElementById("props").innerHTML = str;
             return;
         }
+    }
+    if (e.altKey) {
+        var entity = null;
+        var i = -1;
+        for (var i = 0; i < entities.length; i++) {
+            if (p.dist(entities[i].p) < 15)
+                entity = entities[i];
+        }
+        if (entity == null) {
+            entity = new Entity();
+            entity.p = copyvec2(p);
+            entities.push(entity);
+            i = entities.length - 1;
+        }
+        document.getElementById("props").innerHTML = '<textarea id="entity"></textarea><input type="button" value="Save" onclick="saveEntitySettings(' + i + ')">';
+        return;
     }
     if (currentWall != null) {
         currentWall.b = copyvec2(p);
@@ -229,9 +256,6 @@ function monmousedown(e) {
             while (ws.length > 0) {
                 var wa = ws[0];
                 if (wa.s != null) {
-                    /* var ind = wa.s.walls.indexOf(wa);
-                    wa.s.walls[(ind - 1) % wa.s.walls.length].b = wa.s.walls[(ind + 1) % wa.s.walls.length].a;
-                    wa.s.walls[(ind + 1) % wa.s.walls.length].a = wa.s.walls[(ind - 1) % wa.s.walls.length].b;*/
                     var wal = otherWallWithPoint(wa, snapPosition, wa.s.walls, true);
                     if (wa.a.dist(snapPosition) < .1) {
                         wa.a = wal.a;
@@ -242,9 +266,9 @@ function monmousedown(e) {
                             wa.s.pts.splice(i, 1);
                     }
                     wa.s.triangulate();
-                    walls.splice(walls.indexOf(wal));
+                    walls.splice(walls.indexOf(wal), 1);
                 } else
-                    walls.splice(walls.indexOf(wa));
+                    walls.splice(walls.indexOf(wa), 1);
                 ws = getWallsUsingPoint(snapPosition);
             }
         } else {
@@ -252,8 +276,8 @@ function monmousedown(e) {
                 if (p.dist(sectors[i].p) < 15) {
                     var s = sectors[i];
                     for (var j = 0; j < s.walls.length; j++)
-                        walls.splice(walls.indexOf(s.walls[j]));
-                    sectors.splice(i);
+                        walls.splice(walls.indexOf(s.walls[j]), 1);
+                    sectors.splice(i, 1);
                 }
             }
         }
@@ -272,6 +296,10 @@ function monmousedown(e) {
             if (w[i].b.dist(snapPosition) < .1)
                 selectedPoints.push(w[i].b);
         }
+    }
+    for (var i = 0; i < entities.length; i++) {
+        if (p.dist(entities[i].p) < 15)
+            selectedPoints.push(entities[i].p);
     }
     if (e.ctrlKey) {
         for (var i = 0; i < sectors.length; i++) {
@@ -399,6 +427,9 @@ function update() {
             continue;
         drawLine(new vec2(wall.a.x + camera.x, wall.a.y + camera.y), new vec2(wall.b.x + camera.x, wall.b.y + camera.y), "#000000", wall.isPortal);
     }
+    for (var i = 0; i < entities.length; i++) {
+        drawText(new vec2(entities[i].p.x + camera.x, entities[i].p.y + camera.y), entities[i].str.split('\n')[0]);
+    }
     if (snapPosition)
         drawRect(new vec2(snapPosition.x + camera.x - 5, snapPosition.y + camera.y - 5), new vec2(snapPosition.x + camera.x + 5, snapPosition.y + camera.y + 5), "#333333", true);
     drawText(new vec2(0, 750), "Snap: " + (snap ? "on" : "off"));
@@ -443,12 +474,6 @@ function lineLine(a, b, c, d) {
 }
 
 function PolygonIsConvex(Points) {
-    // For each set of three adjacent points A, B, C,
-    // find the dot product AB � BC. If the sign of
-    // all the dot products is the same, the angles
-    // are all positive or negative (depending on the
-    // order in which we visit them) so the polygon
-    // is convex.
     var got_negative = false;
     var got_positive = false;
     var num_points = Points.length;
@@ -467,7 +492,6 @@ function PolygonIsConvex(Points) {
             return false;
     }
 
-    // If we got this far, the polygon is convex.
     return true;
 }
 function sqr(x) {
@@ -533,6 +557,11 @@ function save() {
         for (var j = 0; j < s.tris.length; j++)
             str += s.pts.indexOf(s.tris[j].points_[0]) + "," + s.pts.indexOf(s.tris[j].points_[1]) + "," + s.pts.indexOf(s.tris[j].points_[2]) + "\n";
         str += s.p.x + "," + s.p.y + "\n";
+    }
+    str += entities.length + "\n";
+    for (var i = 0; i < entities.length; i++) {
+        str += entities[i].str.length + "," + str[i].str + "\n";
+        str += entities[i].p.x + "," + entities[i].p.y + "\n";
     }
     (document.getElementById("out")).value = str;
 }
@@ -607,5 +636,10 @@ function load() {
             walls[i].isPortal = true;
         }
     }
+    var nEntity = parseInt(lines[at++]);
+    for (var i = 0; i < nEntity; i++) {
+        var e = new Entity();
+        e.str = lines[at++].split(',')[1];
+        e.p = getVec2(lines[at++]);
+    }
 }
-//@ sourceMappingURL=app.js.map
