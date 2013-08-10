@@ -61,6 +61,24 @@ class Sector {
         }
         poly2tri.triangulate(sctx);
         this.tris = sctx.getTriangles();
+        for (var i = 0; i < this.walls.length; i++)
+        {
+            this.walls[i].s = this;
+            if (this.walls[i].isPortal)
+            {
+                for (var j = 0; j < walls.length; j++)
+                {
+                    if (walls[j] == this.walls[i])
+                        continue;
+                    if (walls[j].a.dist(this.walls[i].a) < .1 && walls[j].b.dist(this.walls[i].b) < .1)
+                    {
+                        this.walls[i].portal = walls[j].s;
+                        walls[j].portal = this;
+                        break;
+                    }
+                }
+            }
+        }
     }
 }
 var sectors: Sector[] = new Array<Sector>();
@@ -270,10 +288,10 @@ function monmousedown(e) {
         s.walls = w;
         s.triangulate();
         s.p = p;
+        s.bottom = 0;
+        s.top = 10;
         s.floorColor = "#AAAAAA";
         s.ceilingColor = "#555555";
-        for (var i = 0; i < w.length; i++)
-            w[i].s = s;
         sectors.push(s);
     }
     if (e.altKey)
@@ -460,4 +478,34 @@ var  oddNodes = false;
     }
 
     return oddNodes;
+}
+function save() {
+    var str = "";
+    str += walls.length;
+    str += "\n";
+    for (var i = 0; i < walls.length; i++)
+    {
+        str += walls[i].a.x + "," + walls[i].a.y + "\n";
+        str += walls[i].b.x + "," + walls[i].b.y + "\n";
+        str += sectors.indexOf(walls[i].s) + "," + sectors.indexOf(walls[i].portal) + "\n";
+        str += walls[i].textureName.length + "," + walls[i].textureName + "\n";
+    }
+    str += sectors.length + "\n";
+    for (var i = 0; i < sectors.length; i++)
+    {
+        var s = sectors[i];
+        str += s.walls.length + "\n";
+        for (var j = 0; j < s.walls.length; j++)
+            str += walls.indexOf(s.walls[j]) + "\n";
+        str += s.bottom + "," + s.top + "\n";
+        str += s.floorColor + "," + s.ceilingColor + "\n";
+        str += s.pts.length + "\n";
+        for (var j = 0; j < s.pts.length; j++)
+            str += s.pts[j].x + "," + s.pts[j].y + "\n";
+        str += s.tris.length + "\n";
+        for (var j = 0; j < s.tris.length; j++)
+            str += s.pts.indexOf(s.tris[j].points_[0]) + "," + s.pts.indexOf(s.tris[j].points_[1]) + "," + s.pts.indexOf(s.tris[j].points_[2]) + "\n";
+        str += s.p.x + "," + s.p.y + "\n";
+    }
+   ( <any>document.getElementById("out")).value = str;
 }

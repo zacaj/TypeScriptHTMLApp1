@@ -11,7 +11,7 @@
 <body>
     <div id="content">
         <canvas id="canvas" width="1024" height="768"></canvas>
-        <br/>
+        <div>><br/>
         right click to place walls
         <br/>escape to cancel wall<br>
         s to toggle snap<br/>
@@ -19,8 +19,13 @@
         alt+left click a wall of a sector to make it into a portal (open to another sector)<br/>
                                   ctrl+left click a 'S' to retriangulate a sector<br>
         right click a 'S' to edit sector properties<br/>
-        C to toggle ceiling drawing, F to toggle floors <br/>
-        <div id="props" style="border-color:2px solid red">f</div>
+        C to toggle ceiling drawing, F to toggle floors <br/></div
+                                                                                 <div id="props" style="border-color:2px solid red">f</div>
+                                                                                 <div id="">
+                                                                                     <textarea id="out"></textarea>
+                                                                                     <input type="button" onclick="save();" value="Save">
+                                                                                     <input type="button" onclick="load();" value="Load">
+                                                                                 </div>
     </div>
 </body>
 </html>
