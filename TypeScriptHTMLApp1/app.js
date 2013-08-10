@@ -1,4 +1,10 @@
-﻿var ctx;
+﻿var Triangle = (function () {
+    function Triangle() {
+    }
+    return Triangle;
+})();
+
+var ctx;
 var vec2 = (function () {
     function vec2(x, y) {
         this.x = x;
@@ -120,6 +126,27 @@ function moncontextmenu(e) {
             walls.push(currentWall);
         }
     } else {
+        for (var i = 0; i < walls.length; i++) {
+            var d = distToSegmentSquared(p, walls[i].a, walls[i].b);
+            if (d < 15 * 15) {
+                var w = walls[i];
+                if (w.s != null) {
+                    var oldb = w.b;
+                    var bi = w.s.pts.indexOf(w.b);
+                    w.b = p;
+                    w.s.pts.splice(bi + 1, 0, oldb);
+                    var wi = w.s.walls.indexOf(w);
+                    var neww = new Wall();
+                    neww.a = w.b;
+                    neww.b = oldb;
+                    neww.textureName = w.textureName;
+                    neww.s = w.s;
+                    w.s.walls.splice(wi, 0, neww);
+                    w.s.triangulate();
+                }
+            }
+        }
+
         currentWall = new Wall();
         currentWall.a = copyvec2(p);
         currentWall.b = copyvec2(p);
@@ -454,5 +481,75 @@ function save() {
         str += s.p.x + "," + s.p.y + "\n";
     }
     (document.getElementById("out")).value = str;
+}
+var lpts;
+function getVec2(str) {
+    var strs = str.split(',');
+    var v = new vec2(parseFloat(strs[0]), parseFloat(strs[1]));
+    for (var i = 0; i < lpts.length; i++)
+        if (lpts[i].dist(v) < .1)
+            return lpts[i];
+    lpts.push(v);
+    return v;
+}
+function makeTri(a, b, c) {
+    var r = new Triangle();
+    (r).points_ = new Array();
+    (r).points_.push(a);
+    (r).points_.push(b);
+    (r).points_.push(c);
+    return r;
+}
+function load() {
+    lpts = new Array();
+    var str = (document.getElementById("out")).value;
+    var lines = str.split('\n');
+    var nWall = parseInt(lines[0]);
+    for (var i = 0; i < nWall; i++) {
+        var wall = new Wall();
+        wall.a = getVec2(lines[i * 4 + 0 + 1]);
+        wall.b = getVec2(lines[i * 4 + 1 + 1]);
+        (wall).t = getVec2(lines[i * 4 + 2 + 1]);
+        wall.textureName = lines[i * 4 + 3 + 1].split(',')[1];
+        walls.push(wall);
+    }
+    var at = nWall * 4 + 1;
+    var nSector = parseInt(lines[at]);
+    at++;
+    for (var i = 0; i < nSector; i++) {
+        var s = new Sector();
+        s.walls = new Array();
+        nWall = parseInt(lines[at++]);
+        for (var j = 0; j < nWall; j++)
+            s.walls.push(walls[lines[at + j]]);
+        at += nWall;
+        var t = getVec2(lines[at++]);
+        s.bottom = t.x;
+        s.top = t.y;
+        t = lines[at++].split(',');
+        s.floorColor = t[0];
+        s.ceilingColor = t[1];
+        var nP = parseInt(lines[at++]);
+        s.pts = new Array();
+        for (var j = 0; j < nP; j++) {
+            s.pts.push(getVec2(lines[at++]));
+        }
+        var nT = parseInt(lines[at++]);
+        s.tris = new Array();
+        for (var j = 0; j < nT; j++) {
+            var t = lines[at++].split(',');
+            s.tris.push(makeTri(s.pts[t[0]], s.pts[t[1]], s.pts[t[2]]));
+        }
+        s.p = getVec2(lines[at++]);
+        sectors.push(s);
+    }
+    for (var i = 0; i < walls.length; i++) {
+        var t = (walls[i]).t;
+        walls[i].s = sectors[t.x];
+        if (t.y != -1) {
+            walls[i].portal = sectors[t.y];
+            walls[i].isPortal = true;
+        }
+    }
 }
 //@ sourceMappingURL=app.js.map
