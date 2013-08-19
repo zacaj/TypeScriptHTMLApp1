@@ -25,7 +25,7 @@ var drawCeilings = false;
 var Wall = (function () {
     function Wall() {
         this.s = null;
-        this.textureName = "";
+        this.textureName = "LB_Wall01.png";
         this.portal = null;
         this.isPortal = false;
         this.left = null;
@@ -46,13 +46,19 @@ var Sector = (function () {
     function Sector() {
     }
     Sector.prototype.triangulate = function () {
-        var sctx = new poly2tri.SweepContext(this.pts, { cloneArrays: true });
-        for (var i = 0; i < sectors.length; i++) {
-            if (sectors[i] == this)
-                continue;
-            if (pointInPolygon(sectors[i].p, this.pts))
-                sctx.addHole(sectors[i].pts);
-        }
+        this.p = new vec2(0, 0);
+        var usedWalls = new Array();
+        usedWalls = usedWalls.concat(this.walls);
+        var pts = new Array();
+        for (var i = 0; i < this.pts.length; i++)
+            pts.push(copyvec2(this.pts[i]));
+        var sctx = new poly2tri.SweepContext(pts, { cloneArrays: true });
+
+        if (this.holes)
+            for (var i = 0; i < this.holes.length; i++) {
+                sctx.addHole(this.holes[i]);
+            }
+
         poly2tri.triangulate(sctx);
         this.tris = sctx.getTriangles();
         for (var i = 0; i < this.walls.length; i++) {
@@ -69,6 +75,10 @@ var Sector = (function () {
                 }
             }
         }
+        for (var i = 0; i < this.pts.length; i++)
+            this.p = new vec2(this.p.x + this.pts[i].x, this.p.y + this.pts[i].y);
+        this.p.x /= this.pts.length;
+        this.p.y /= this.pts.length;
     };
     return Sector;
 })();
@@ -79,6 +89,60 @@ var Entity = (function () {
     }
     return Entity;
 })();
+var ch = null, cv = null;
+var nextSector = null;
+function makeSector() {
+    var s = new Sector();
+    s.walls = [];
+    nextSector = s;
+    for (var i = 0; i < wallList.length; i++) {
+        if (wallList[i].s != null) {
+            var r = new Wall();
+            r.a = wallList[i].a;
+            r.b = wallList[i].b;
+            r.textureName = wallList[i].textureName;
+            r.isPortal = true;
+            r.portal = wallList[i].s;
+            wallList[i].isPortal = true;
+            wallList[i].portal = s;
+            s.walls.push(r);
+            walls.push(r);
+        } else {
+            s.walls.push(wallList[i]);
+        }
+    }
+    var wall = s.walls[0];
+    var w = [wall];
+    var lastWall = wall;
+    var pt = wall.b;
+    var ps = [pt];
+    while (true) {
+        var wa = otherWallWithPoint(lastWall, pt, s.walls);
+        if (wa == null) {
+            alert("no closed loop!");
+            break;
+        }
+        if (wa == wall)
+            break;
+        if (w.indexOf(wa) != -1) {
+            alert("stuck in a loop!");
+            return;
+        }
+        if (wa.a.dist(pt) < .1)
+            pt = wa.b; else
+            pt = wa.a;
+        w.push(wa);
+        ps.push(pt);
+        lastWall = wa;
+    }
+
+    s.pts = ps;
+    s.extPts = ps.slice(0);
+    s.bottom = 0;
+    s.top = 10;
+    s.floorColor = "#1d2630";
+    s.ceilingColor = "#983e68";
+}
 window.onkeydown = function (e) {
     if (e.keyCode == 'S'.charCodeAt(0))
         snap = !snap;
@@ -92,7 +156,76 @@ window.onkeydown = function (e) {
         drawFloors = !drawFloors;
     if (e.keyCode == 'C'.charCodeAt(0))
         drawCeilings = !drawCeilings;
+    if (e.keyCode == 'H'.charCodeAt(0))
+        ch = snapPosition != null ? snapPosition.y : lastMousePos.y;
+    if (e.keyCode == 'V'.charCodeAt(0))
+        cv = snapPosition != null ? snapPosition.x : lastMousePos.x;
+    if (e.altKey) {
+        if (e.keyCode == 'A'.charCodeAt(0)) {
+            if (!nextSector) {
+                alert("make a sector first!");
+            } else {
+                if (!nextSector.holes)
+                    nextSector.holes = new Array();
+                var wall = wallList[0];
+                var w = [wall];
+                var lastWall = wall;
+                var pt = wall.b;
+                var ps = [pt];
+                while (true) {
+                    var wa = otherWallWithPoint(lastWall, pt, wallList, true);
+                    if (wa == null) {
+                        alert("no closed loop!");
+                        return;
+                    }
+                    if (wa == wall)
+                        break;
+                    if (w.indexOf(wa) != -1) {
+                        alert("stuck in a loop!");
+                        return;
+                    }
+                    if (wa.a.dist(pt) < .1)
+                        pt = wa.b; else
+                        pt = wa.a;
+                    w.push(wa);
+                    ps.push(pt);
+                    lastWall = wa;
+                }
+                nextSector.holes.push(ps);
+                nextSector.extPts = nextSector.extPts.concat(ps);
+                wallList = null;
+            }
+        }
+        if (e.keyCode == 'T'.charCodeAt(0)) {
+            if (!nextSector) {
+                makeSector();
+            }
+            wallList = null;
+        }
+        if (e.keyCode == 'S'.charCodeAt(0)) {
+            var s = nextSector;
+            if (!nextSector) {
+                makeSector();
+                s = nextSector;
+                nextSector = null;
+            }
+            s.triangulate();
+            sectors.push(s);
+            wallList = null;
+            nextSector = null;
+        }
+    }
 };
+window.onkeyup = function (e) {
+    if (e.keyCode == 'H'.charCodeAt(0))
+        ch = null;
+    if (e.keyCode == 'V'.charCodeAt(0))
+        cv = null;
+};
+function triangulateAll() {
+    for (var i = 0; i < sectors.length; i++)
+        sectors[i].triangulate();
+}
 var currentWall = null;
 var snapPosition = null;
 var camera = new vec2(0, 0);
@@ -103,31 +236,68 @@ function saveSectorSettings(i) {
     sectors[i].floorColor = (document.getElementById("fc")).value;
     sectors[i].bottom = (document.getElementById("fh")).value;
     sectors[i].top = (document.getElementById("ch")).value;
+    document.getElementById("props").innerHTML = "";
 }
 function saveEntitySettings(i) {
     var e = entities[i];
     e.str = (document.getElementById("entity")).value;
+    document.getElementById("props").innerHTML = "";
+}
+function saveWallSettings(i) {
+    var w = walls[i];
+    w.textureName = (document.getElementById("wall" + i + "")).value;
+    var p = parseInt((document.getElementById("portal" + i)).value);
+    if (p != -1) {
+        w.isPortal = true;
+        w.portal = sectors[p];
+    } else {
+        w.isPortal = false;
+        w.portal = null;
+    }
+    document.getElementById("props").innerHTML = "";
 }
 function moncontextmenu(e) {
     var p;
     if (snapPosition != null)
         p = snapPosition; else
         p = new vec2(e.offsetX - camera.x, e.offsetY - camera.y);
+    if (ch != null)
+        p.y = ch;
+    if (cv != null)
+        p.x = cv;
     e.preventDefault();
     for (var i = 0; i < sectors.length; i++) {
         if (p.dist(sectors[i].p) < 15) {
             var str = "";
             var s = sectors[i];
+            str += i + "<br>";
             str += 'floor color: <input type="text" id="fc" value="' + s.floorColor + '"><br>';
             str += 'ceiling color: <input type="text" id="cc" value="' + s.ceilingColor + '"><br>';
             str += 'floor height: <input type="text" id="fh" value="' + s.bottom + '"><br>';
             str += 'ceiling height: <input type="text" id="ch" value="' + s.top + '"><br>';
+
             str += '<input type="button" value="Save" onclick="saveSectorSettings(' + i + ')">';
             document.getElementById("props").innerHTML = str;
             return;
         }
     }
     if (e.altKey) {
+        var found = false;
+        document.getElementById("props").innerHTML = "";
+        for (var i = 0; i < walls.length; i++) {
+            var d = distToSegmentSquared(p, walls[i].a, walls[i].b);
+            if (d < 15 * 15) {
+                var w = walls[i];
+                var str = "" + i + ": " + w.a.x + ", " + w.a.y + " -> " + w.b.x + ", " + w.b.y + "<br>";
+                str += 'texture: <input type="text" id="wall' + i + '" value="' + w.textureName + '"><br>';
+                str += 'portal: <input type="text" id="portal' + i + '" value="' + sectors.indexOf(w.portal) + '"><br>';
+                str += '<input type="button" value="Save" onclick="saveWallSettings(' + i + ')"><br>';
+                document.getElementById("props").innerHTML += str;
+                found = true;
+            }
+        }
+        if (found == true)
+            return;
         var entity = null;
         var i = -1;
         for (var i = 0; i < entities.length; i++) {
@@ -153,40 +323,41 @@ function moncontextmenu(e) {
             walls.push(currentWall);
         }
     } else {
-        for (var i = 0; i < walls.length; i++) {
-            var d = distToSegmentSquared(p, walls[i].a, walls[i].b);
-            if (d < 15 * 15) {
-                var w = walls[i];
-                if (w.s != null) {
-                    var oldb = w.b;
-                    var bi = w.s.pts.indexOf(w.b);
-                    w.b = p;
-                    w.s.pts[bi] = p;
-                    w.s.pts.splice(bi + 1, 0, oldb);
-                    var wi = w.s.walls.indexOf(w);
-                    var neww = new Wall();
-                    neww.a = w.b;
-                    neww.b = oldb;
-                    neww.textureName = w.textureName;
-                    neww.s = w.s;
-                    neww.isPortal = false;
-                    walls.push(neww);
-                    w.s.walls.splice(wi, 0, neww);
-                    w.s.triangulate();
-                } else {
-                    var oldb = w.b;
-                    w.b = p;
-                    var neww = new Wall();
-                    neww.a = w.b;
-                    neww.b = oldb;
-                    neww.textureName = w.textureName;
-                    neww.s = w.s;
-                    neww.isPortal = false;
-                    walls.push(neww);
+        if (snapPosition == null)
+            for (var i = 0; i < walls.length; i++) {
+                var d = distToSegmentSquared(p, walls[i].a, walls[i].b);
+                if (d < 15 * 15) {
+                    var w = walls[i];
+                    if (w.s != null) {
+                        var oldb = w.b;
+                        var bi = w.s.pts.indexOf(w.b);
+                        w.b = p;
+                        w.s.pts[bi] = p;
+                        w.s.pts.splice(bi + 1, 0, oldb);
+                        var wi = w.s.walls.indexOf(w);
+                        var neww = new Wall();
+                        neww.a = w.b;
+                        neww.b = oldb;
+                        neww.textureName = w.textureName;
+                        neww.s = w.s;
+                        neww.isPortal = false;
+                        walls.push(neww);
+                        w.s.walls.splice(wi, 0, neww);
+                        w.s.triangulate();
+                    } else {
+                        var oldb = w.b;
+                        w.b = p;
+                        var neww = new Wall();
+                        neww.a = w.b;
+                        neww.b = oldb;
+                        neww.textureName = w.textureName;
+                        neww.s = w.s;
+                        neww.isPortal = false;
+                        walls.push(neww);
+                    }
+                    return;
                 }
-                return;
             }
-        }
 
         currentWall = new Wall();
         currentWall.a = copyvec2(p);
@@ -197,8 +368,13 @@ function moncontextmenu(e) {
 var mousedown = false;
 var selectedPoints = new Array();
 var lastMousePos = null;
+
 function monmousemove(e) {
     var p = new vec2(e.offsetX - camera.x, e.offsetY - camera.y);
+    if (ch != null)
+        p.y = ch;
+    if (cv != null)
+        p.x = cv;
     if (currentWall != null) {
         currentWall.b.x = p.x;
         currentWall.b.y = p.y;
@@ -247,9 +423,20 @@ function otherWallWithPoint(wall, p, list, inSector) {
     }
     return null;
 }
+var wallList = null;
 function monmousedown(e) {
+    if (e.button != 0)
+        return;
     mousedown = true;
     e.preventDefault();
+    var p;
+    if (snapPosition != null)
+        p = snapPosition; else
+        p = new vec2(e.offsetX - camera.x, e.offsetY - camera.y);
+    if (ch != null)
+        p.y = ch;
+    if (cv != null)
+        p.x = cv;
     if (e.ctrlKey && e.altKey) {
         if (snapPosition != null) {
             var ws = getWallsUsingPoint(snapPosition);
@@ -283,17 +470,13 @@ function monmousedown(e) {
         }
         return;
     }
-    var p;
-    if (snapPosition != null)
-        p = snapPosition; else
-        p = new vec2(e.offsetX - camera.x, e.offsetY - camera.y);
     if (snapPosition != null) {
         var w = getWallsUsingPoint(snapPosition);
         var i = 0;
         for (; i < w.length; i++) {
-            if (w[i].a.dist(snapPosition) < .1)
+            if (w[i].a.dist(snapPosition) < .1 && selectedPoints.indexOf(w[i].a) == -1)
                 selectedPoints.push(w[i].a);
-            if (w[i].b.dist(snapPosition) < .1)
+            if (w[i].b.dist(snapPosition) < .1 && selectedPoints.indexOf(w[i].b) == -1)
                 selectedPoints.push(w[i].b);
         }
     }
@@ -345,37 +528,26 @@ function monmousedown(e) {
             pts.push(pt);
             lastWall = wa;
         }
-        var s = new Sector();
-        s.pts = pts;
-        s.walls = w;
-        s.triangulate();
-        s.p = p;
-        s.bottom = 0;
-        s.top = 10;
-        s.floorColor = "#AAAAAA";
-        s.ceilingColor = "#555555";
-        sectors.push(s);
+        if (!wallList)
+            wallList = [];
+        wallList = wallList.concat(w);
     }
     if (e.altKey) {
+        var sd = 30;
+        var sw = null;
         for (var i = 0; i < walls.length; i++) {
             var d = distToSegmentSquared(p, walls[i].a, walls[i].b);
-            if (walls[i].s == null) {
-                alert("please make a sector first");
-                break;
+            if (d < sd) {
+                sd = d;
+                sw = walls[i];
             }
-            if (walls[i].isPortal == null) {
-                alert("already a portal");
-                break;
-            }
-            if (d < 15 * 15) {
-                walls[i].isPortal = true;
-                var wall = new Wall();
-                wall.a = walls[i].a;
-                wall.b = walls[i].b;
-                wall.isPortal = true;
-                walls.push(wall);
-                break;
-            }
+        }
+        if (sw) {
+            if (!wallList)
+                wallList = [];
+            if (wallList.indexOf(sw) != -1)
+                wallList.splice(wallList.indexOf(sw), 1); else
+                wallList.push(sw);
         }
     }
 }
@@ -425,14 +597,22 @@ function update() {
         var wall = walls[i];
         if (wall.isPortal == true && wall.s == null)
             continue;
-        drawLine(new vec2(wall.a.x + camera.x, wall.a.y + camera.y), new vec2(wall.b.x + camera.x, wall.b.y + camera.y), "#000000", wall.isPortal);
+        var color = "#000000";
+        if (wallList)
+            if (wallList.indexOf(wall) != -1)
+                color = "#FF0000";
+
+        drawLine(new vec2(wall.a.x + camera.x, wall.a.y + camera.y), new vec2(wall.b.x + camera.x, wall.b.y + camera.y), color, wall.isPortal);
     }
     for (var i = 0; i < entities.length; i++) {
         drawText(new vec2(entities[i].p.x + camera.x, entities[i].p.y + camera.y), entities[i].str.split('\n')[0]);
+        drawRect(new vec2(entities[i].p.x + camera.x, entities[i].p.y + camera.y), new vec2(entities[i].p.x + camera.x + 1, entities[i].p.y + camera.y + 1), "#00FF00");
     }
     if (snapPosition)
         drawRect(new vec2(snapPosition.x + camera.x - 5, snapPosition.y + camera.y - 5), new vec2(snapPosition.x + camera.x + 5, snapPosition.y + camera.y + 5), "#333333", true);
     drawText(new vec2(0, 750), "Snap: " + (snap ? "on" : "off"));
+    if (lastMousePos)
+        drawText(new vec2(500, 750), "" + lastMousePos.x + ", " + lastMousePos.y);
 }
 function drawRect(a, b, color, outline) {
     if (typeof color === "undefined") { color = "#000000"; }
@@ -446,11 +626,11 @@ function drawLine(a, b, color, dotted) {
     if (typeof color === "undefined") { color = "#000000"; }
     if (typeof dotted === "undefined") { dotted = false; }
     if (dotted == true)
-        (ctx).setLineDash([5]);
+        (ctx).setLineDash([3, 7]);
     ctx.beginPath();
     ctx.moveTo(a.x, a.y);
     ctx.lineTo(b.x, b.y);
-    ctx.fillStyle = color;
+    ctx.strokeStyle = color;
     ctx.closePath();
     ctx.stroke();
     if (dotted == true)
@@ -532,7 +712,56 @@ function pointInPolygon(p, pts) {
 
     return oddNodes;
 }
+function pointInList(p, l) {
+    for (var i = 0; i < l.length; i++)
+        if (l[i].dist(p) < .1)
+            return i;
+    return -1;
+}
 function save() {
+    triangulateAll();
+    var fixed = [];
+    for (var i = 0; i < walls.length; i++) {
+        if (!walls[i].s) {
+            for (var j = 0; j < sectors.length; j++) {
+                var s = sectors[j];
+                if (s.holes)
+                    for (var k = 0; k < s.holes.length; k++)
+                        for (var l = 0; l < s.holes[k].length; l++) {
+                            if (walls[i].a.dist(s.holes[k][l]) < .1 || walls[i].b.dist(s.holes[k][l]) < .1) {
+                                s.walls.push(walls[i]);
+                                walls[i].s = s;
+                                fixed.push(walls[i]);
+                            }
+                        }
+            }
+            if (!walls[i].s) {
+                walls.splice(i, 1);
+                i--;
+            }
+        }
+    }
+    for (var i = 0; i < walls.length; i++) {
+        if (walls[i].isPortal == true)
+            continue;
+        for (var j = 0; j < sectors.length; j++) {
+            if (sectors[j].walls.indexOf(walls[i]) != -1)
+                continue;
+            if (pointInPolygon(walls[i].a, sectors[j].pts) && pointInPolygon(walls[i].b, sectors[j].pts) && pointInList(walls[i].a, sectors[j].extPts) < sectors[j].pts.length) {
+                var r = new Wall();
+                r.a = walls[i].a;
+                r.b = walls[i].b;
+                r.textureName = walls[i].textureName;
+                r.isPortal = true;
+                r.portal = walls[i].s;
+                r.s = sectors[j];
+                walls[i].isPortal = true;
+                walls[i].portal = sectors[j];
+                sectors[j].walls.push(r);
+                walls.push(r);
+            }
+        }
+    }
     var str = "";
     str += walls.length;
     str += "\n";
@@ -553,14 +782,26 @@ function save() {
         str += s.pts.length + "\n";
         for (var j = 0; j < s.pts.length; j++)
             str += s.pts[j].x + "," + s.pts[j].y + "\n";
+        str += s.extPts.length + "\n";
+        for (var j = 0; j < s.extPts.length; j++)
+            str += s.extPts[j].x + "," + s.extPts[j].y + "\n";
+        if (!s.holes)
+            str += "0\n"; else {
+            str += s.holes.length + "\n";
+            for (var j = 0; j < s.holes.length; j++) {
+                str += s.holes[j].length + "\n";
+                for (var k = 0; k < s.holes[j].length; k++)
+                    str += s.holes[j][k].x + "," + s.holes[j][k].y + "\n";
+            }
+        }
         str += s.tris.length + "\n";
         for (var j = 0; j < s.tris.length; j++)
-            str += s.pts.indexOf(s.tris[j].points_[0]) + "," + s.pts.indexOf(s.tris[j].points_[1]) + "," + s.pts.indexOf(s.tris[j].points_[2]) + "\n";
+            str += pointInList(s.tris[j].points_[0], s.extPts) + "," + pointInList(s.tris[j].points_[1], s.extPts) + "," + pointInList(s.tris[j].points_[2], s.extPts) + "\n";
         str += s.p.x + "," + s.p.y + "\n";
     }
     str += entities.length + "\n";
     for (var i = 0; i < entities.length; i++) {
-        str += entities[i].str.length + "," + str[i].str + "\n";
+        str += entities[i].str.length + "," + entities[i].str + "\n";
         str += entities[i].p.x + "," + entities[i].p.y + "\n";
     }
     (document.getElementById("out")).value = str;
@@ -586,6 +827,7 @@ function makeTri(a, b, c) {
 function load() {
     walls.splice(0, walls.length);
     sectors.splice(0, sectors.length);
+    wallList = null;
     lpts = new Array();
     var str = (document.getElementById("out")).value;
     var lines = str.split('\n');
@@ -619,11 +861,28 @@ function load() {
         for (var j = 0; j < nP; j++) {
             s.pts.push(getVec2(lines[at++]));
         }
+        nP = parseInt(lines[at++]);
+        s.extPts = new Array();
+        for (var j = 0; j < nP; j++) {
+            s.extPts.push(getVec2(lines[at++]));
+        }
+        var nH = parseInt(lines[at++]);
+        if (nH > 0)
+            s.holes = new Array();
+        for (var j = 0; j < nH; j++) {
+            nP = parseInt(lines[at++]);
+            var r = new Array();
+            for (var k = 0; k < nP; k++) {
+                r.push(getVec2(lines[at++]));
+            }
+            s.holes.push(r);
+        }
+
         var nT = parseInt(lines[at++]);
         s.tris = new Array();
         for (var j = 0; j < nT; j++) {
             var t = lines[at++].split(',');
-            s.tris.push(makeTri(s.pts[t[0]], s.pts[t[1]], s.pts[t[2]]));
+            s.tris.push(makeTri(s.extPts[parseInt(t[0])], s.extPts[parseInt(t[1])], s.extPts[parseInt(t[2])]));
         }
         s.p = getVec2(lines[at++]);
         sectors.push(s);
@@ -639,7 +898,15 @@ function load() {
     var nEntity = parseInt(lines[at++]);
     for (var i = 0; i < nEntity; i++) {
         var e = new Entity();
-        e.str = lines[at++].split(',')[1];
+
+        var strln = lines[at++];
+        var str = strln.split(',')[1];
+        var l = parseInt(strln.split(',')[0]);
+        while (l > str.length) {
+            str = str + "\n" + lines[at++];
+        }
         e.p = getVec2(lines[at++]);
+        e.str = str;
+        entities.push(e);
     }
 }
